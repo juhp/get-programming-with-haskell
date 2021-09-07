@@ -1,38 +1,62 @@
-robot (name,attack,hp)  = \message -> message (name,attack,hp)
+data Bot = Bot {name :: String,
+                attack :: Int,
+                hit :: Int}
 
-killerRobot = robot ("Kill3r", 25, 200)
+data Robot = Robot ((Bot -> Bot) -> Bot)
 
-getAttack aRobot = aRobot attack
-getHP aRobot = aRobot hp
+robot :: Bot -> Robot
+robot st = Robot (\f -> f st)
 
-printRobot aRobot =
-  aRobot (\(n,a,h) ->
-             putStrLn $ n ++ " attack:" ++ (show a) ++ " hp:"++ (show h))
+killerRobot :: Robot
+killerRobot = robot (Bot "Kill3r" 25 200)
 
-damage aRobot attackDamage = aRobot (\(n,a,h) ->
-                                       robot (n,a,h-attackDamage))
+get :: (Bot -> a) -> Robot -> a
+get f (Robot self) = f $ self id
 
-fight aRobot defender = damage defender attack
-  where attack = if (getHP aRobot) > 10
-                 then getAttack aRobot
-                 else 0
+update :: (Bot -> Bot) -> Robot -> Robot
+update f (Robot self) = Robot (\g -> g (self f))
 
-gentleGiant = robot ("Mr. Friendly", 10, 300)
+printRobot :: Robot -> IO ()
+printRobot bot =
+  let (Bot n a h) = get id bot
+  in putStrLn $ n ++ " attack:" ++ (show a) ++ " hp:"++ (show h)
 
-gentleGiantRound1 = fight killerRobot gentleGiant
-killerRobotRound1 = fight gentleGiant killerRobot
-gentleGiantRound2 = fight killerRobotRound1 gentleGiantRound1
-killerRobotRound2 = fight gentleGiantRound1 killerRobotRound1
-gentleGiantRound3 = fight killerRobotRound2 gentleGiantRound2
-killerRobotRound3 = fight gentleGiantRound2 killerRobotRound2
+damage :: Robot -> Int -> Robot
+damage bot attackDamage =
+  update (\(Bot n a h) -> (Bot n a (h-attackDamage))) bot
 
+fight :: Robot -> Robot -> Robot
+fight aRobot defender = damage defender attackHit
+  where
+    attackHit = if (get hit aRobot > 10)
+             then get attack aRobot
+             else 0
 
-fastRobot = robot ("speedy", 15, 40)
-slowRobot = robot ("slowpoke", 20, 30)
+gentleGiant = robot (Bot "Mr. Friendly" 10 300)
 
-fastRobotRound3 = fight slowRobotRound3 fastRobotRound2
-fastRobotRound2 = fight slowRobotRound2 fastRobotRound1
-fastRobotRound1 = fight slowRobotRound1 fastRobot
-slowRobotRound2 = fight fastRobotRound1 slowRobotRound1
-slowRobotRound3 = fight fastRobotRound2 slowRobotRound2
-slowRobotRound1 = fight fastRobot slowRobot
+battle1, battle2 :: IO ()
+
+battle1 = do
+  printRobot gentleGiantRound3
+  printRobot killerRobotRound3
+  where
+    gentleGiantRound1 = fight killerRobot gentleGiant
+    killerRobotRound1 = fight gentleGiant killerRobot
+    gentleGiantRound2 = fight killerRobotRound1 gentleGiantRound1
+    killerRobotRound2 = fight gentleGiantRound1 killerRobotRound1
+    gentleGiantRound3 = fight killerRobotRound2 gentleGiantRound2
+    killerRobotRound3 = fight gentleGiantRound2 killerRobotRound2
+
+fastRobot = robot (Bot "speedy" 15 40)
+slowRobot = robot (Bot "slowpoke" 20 30)
+
+battle2 = do
+  printRobot slowRobotRound3
+  printRobot fastRobotRound3
+  where
+    fastRobotRound3 = fight slowRobotRound3 fastRobotRound2
+    fastRobotRound2 = fight slowRobotRound2 fastRobotRound1
+    fastRobotRound1 = fight slowRobotRound1 fastRobot
+    slowRobotRound3 = fight fastRobotRound2 slowRobotRound2
+    slowRobotRound2 = fight fastRobotRound1 slowRobotRound1
+    slowRobotRound1 = fight fastRobot slowRobot
