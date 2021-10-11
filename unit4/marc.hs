@@ -7,7 +7,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import qualified Data.Text.IO as T
-import Data.Tuple.Extra
 import Data.Maybe
 
 data Book = Book { bookAuthor :: Text
@@ -25,7 +24,7 @@ main = do
   where
     processRecords :: Int -> ByteString -> [Book]
     processRecords n =
-      mapMaybe maybeBook . take n . map (lookupTitle &&& lookupAuthor) . allRecords
+      take n . mapMaybe lookupBook . allRecords
 
     allRecords :: ByteString -> [MarcRecordRaw]
     allRecords marcStream =
@@ -35,6 +34,12 @@ main = do
       where
         (next, rest) = B.splitAt recordLength marcStream
         recordLength = rawToInt . B.take 5 $ marcStream
+
+    lookupBook :: MarcRecordRaw -> Maybe Book
+    lookupBook record = do
+      title <- lookupTitle record
+      author <- lookupAuthor record
+      return $ Book title author
 
     lookupTitle :: MarcRecordRaw -> Maybe Text
     lookupTitle =
@@ -47,12 +52,6 @@ main = do
       let authorTag = "100"
           authorSubfield = 'a'
       in lookupValue authorTag authorSubfield
-
-    maybeBook :: (Maybe Text, Maybe Text) -> Maybe Book
-    maybeBook (mtitle, mauthor) = do
-      title <- mtitle
-      author <- mauthor
-      return $ Book title author
 
 lookupValue :: Text -> Char -> MarcRecordRaw -> Maybe Text
 lookupValue aTag subfield record =
