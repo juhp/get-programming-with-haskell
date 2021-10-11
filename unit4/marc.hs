@@ -2,6 +2,7 @@
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -62,18 +63,16 @@ lookupValue aTag subfield record =
     lookupSubfield :: Maybe FieldMetadata -> Maybe Text
     lookupSubfield Nothing = Nothing
     lookupSubfield (Just fieldMetadata) =
-      if null results
-      then Nothing
-      else Just ((T.drop 1 . head) results)
+      case find ((== subfield) . T.head) subfields of
+        Nothing -> Nothing
+        -- field terminator: Record separator '\RS' = chr 30 = 0x1e
+        Just result -> Just . T.takeWhile (/= '\^^') . T.drop 1 $ result
       where
         rawField = getTextField record fieldMetadata
 
-        fieldDelimiter :: Char
-        fieldDelimiter = toEnum 31
-
-        subfields = T.split (== fieldDelimiter) rawField
-
-        results = filter ((== subfield) . T.head) subfields
+        subfields =
+          let delimiter = '\^_' -- Unit separator '\US' = chr 31 = 0x1f
+          in T.split (== delimiter) rawField
 
 getTextField :: MarcRecordRaw -> FieldMetadata -> Text
 getTextField record fieldMetadata = E.decodeUtf8 byteStringValue
