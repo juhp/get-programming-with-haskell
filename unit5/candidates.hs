@@ -80,6 +80,6 @@ viableCandidateList = map viable
 
 viableCandidate :: Monad m => m Candidate -> m Bool
 viableCandidate mcandidates = do
-  -- viable <$> mcandidates
-  candidate <- mcandidates
-  return $ viable candidate
+  viable <$> mcandidates
+  -- candidate <- mcandidates
+  -- return $ viable candidate
