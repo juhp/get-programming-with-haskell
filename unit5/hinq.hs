@@ -1,15 +1,15 @@
-import Control.Monad
-import Data.Bifunctor
-import Data.Sequence
-import GHC.Base
+module Hinq where
 
+import Control.Applicative
+import Control.Monad
+import Data.Bifunctor (bimap)
 
 data Name = Name
             { firstName ::String
             , lastName :: String }
 
 instance Show Name  where
-   show (Name first last) = mconcat [first," ",last]
+   show (Name firstn lastn) = mconcat [firstn," ",lastn]
 
 
 
@@ -77,10 +77,17 @@ _join data1 data2 prop1 prop2 = do
    guard (prop1 (fst dpairs) == prop2 (snd dpairs))
    return dpairs
 
+joinData :: [(Teacher, Course)]
 joinData = _join teachers courses teacherId teacher
+
+whereResult :: [(Teacher, Course)]
 whereResult = _where ((== "English") . courseTitle . snd) joinData
+
+selectResult :: [Name]
 selectResult = _select (teacherName . fst) whereResult
 
+_hinq :: (Monad m, Alternative m)
+      => (m a -> m b) -> m a -> (m a -> m a) -> m b
 _hinq selectQuery joinQuery whereQuery =
   (selectQuery . whereQuery) joinQuery
 
@@ -143,6 +150,7 @@ enrollments = [Enrollment 1 101
               ,Enrollment 5 101
               ,Enrollment 6 201]
 
+studentEnrollmentsQ :: HINQ [] (Student, Enrollment) (Name, Int)
 studentEnrollmentsQ =
   HINQ_ (_select (bimap studentName course))
   (_join students enrollments studentId student)
@@ -150,6 +158,7 @@ studentEnrollmentsQ =
 studentEnrollments :: [(Name, Int)]
 studentEnrollments = runHINQ studentEnrollmentsQ
 
+englishStudentsQ :: HINQ [] ((Name, Int), Course) Name
 englishStudentsQ = HINQ  (_select (fst . fst))
                          (_join studentEnrollments
                                 courses
