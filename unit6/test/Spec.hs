@@ -10,22 +10,15 @@ prop_validPrimesOnly val =
   where
     result = isPrime val
 
-prop_primesArePrime :: Int -> Bool
-prop_primesArePrime val =
-  if result == Just True
-  then length divisors == 0
-  else True
+prop_isPrime :: Int -> Bool
+prop_isPrime val =
+  case isPrime val of
+    Just isprime ->
+      if isprime
+      then length divisors == 0
+      else length divisors > 0
+    Nothing -> True
   where
-    result = isPrime val
-    divisors = filter ((== 0) . (val `mod`)) [2 .. (val - 1)]
-
-prop_nonPrimesAreComposite :: Int -> Bool
-prop_nonPrimesAreComposite val =
-  if result == Just False
-  then length divisors > 0
-  else True
-  where
-    result = isPrime val
     divisors = filter ((== 0) . (val `mod`)) [2 .. (val - 1)]
 
 prop_factorsMakeOriginal :: Int -> Bool
@@ -48,7 +41,6 @@ prop_allFactorsPrime val =
 main :: IO ()
 main = do
   quickCheck prop_validPrimesOnly
-  quickCheckWith stdArgs { maxSuccess = 1000} prop_primesArePrime
-  quickCheckWith stdArgs { maxSuccess = 1000} prop_nonPrimesAreComposite
+  quickCheckWith stdArgs { maxSuccess = 1000} prop_isPrime
   quickCheck prop_factorsMakeOriginal
   quickCheck prop_allFactorsPrime
