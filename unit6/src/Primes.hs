@@ -11,9 +11,9 @@ primes = sieve [2 .. 100000]
 sieve :: [Int] -> [Int]
 sieve [] = []
 sieve (nextPrime:rest) =
-  nextPrime : (sieve noFactors)
+  nextPrime : sieve noFactors
   where
-    noFactors = filter (not . (== 0) . (`mod` nextPrime)) rest
+    noFactors = filter ((/= 0) . (`mod` nextPrime)) rest
 
 isPrime :: Int -> Maybe Bool
 isPrime n | n < 2 = Nothing

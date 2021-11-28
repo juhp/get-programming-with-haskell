@@ -5,7 +5,7 @@ import Data.Maybe
 prop_validPrimesOnly :: Int -> Bool
 prop_validPrimesOnly val =
   if val < 2 || val >= last primes
-  then result == Nothing
+  then isNothing result
   else isJust result
   where
     result = isPrime val
