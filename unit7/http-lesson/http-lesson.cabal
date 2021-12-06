@@ -1,0 +1,21 @@
+name:                http-lesson
+version:             0.1.0.0
+synopsis:            Initial project template from stack
+license:             BSD3
+license-file:        LICENSE
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2017 Author name here
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable http-lesson-exe
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  build-depends:       base
+                     , bytestring
+                     , http-conduit
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings
+  ghc-options:        -Wall
