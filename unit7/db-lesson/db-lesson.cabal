@@ -22,4 +22,3 @@ executable db-lesson-exe
                      , text
                      , sqlite-simple
   default-language:    Haskell2010
-  default-extensions:  OverloadedStrings
