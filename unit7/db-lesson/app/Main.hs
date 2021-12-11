@@ -20,9 +20,6 @@ data Tool = Tool
 
 data User = User Int String
 
-data Checkout = Checkout { borrower_id :: Int, borrowed_it :: Int}
-  deriving Show
-
 instance FromRow Tool where
   fromRow =
     Tool <$> field
@@ -34,11 +31,6 @@ instance FromRow Tool where
 instance FromRow User where
   fromRow =
     User <$> field
-      <*> field
-
-instance FromRow Checkout where
-  fromRow =
-    Checkout <$> field
       <*> field
 
 showUser :: User -> String
@@ -143,10 +135,10 @@ printCheckedout = do
   forM_ out $ \tool -> do
     (putStrLn . showTool) tool
     withConnection database $ \conn -> do
-      borrows <- query conn
-                 "SELECT * FROM checkedout WHERE tool_id = (?);"
-                 (Only (toolId tool)) :: IO [Checkout]
-      mapM_ (putStrLn . (" borrowed by: " ++) . show . borrower_id) borrows
+      borrowers <- query conn
+                 "SELECT user_id FROM checkedout WHERE tool_id = (?);"
+                 (Only (toolId tool)) :: IO [Only Int]
+      mapM_ (putStrLn . (" borrowed by: " ++) . show . fromOnly) borrowers
 
 
 selectTool :: Connection -> Int -> IO (Maybe Tool)
