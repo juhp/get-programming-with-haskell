@@ -8,6 +8,7 @@ import Data.Time (Day, UTCTime (utctDay), getCurrentTime)
 import Database.SQLite.Simple
 import System.Exit (exitSuccess)
 import Data.Char (isDigit)
+import Control.Monad (forM_)
 
 data Tool = Tool
   { toolId :: Int,
@@ -18,6 +19,9 @@ data Tool = Tool
   }
 
 data User = User Int String
+
+data Checkout = Checkout { borrower_id :: Int, borrowed_it :: Int}
+  deriving Show
 
 instance FromRow Tool where
   fromRow =
@@ -30,6 +34,11 @@ instance FromRow Tool where
 instance FromRow User where
   fromRow =
     User <$> field
+      <*> field
+
+instance FromRow Checkout where
+  fromRow =
+    Checkout <$> field
       <*> field
 
 showUser :: User -> String
@@ -124,13 +133,21 @@ printAvailable :: IO ()
 printAvailable = printToolQuery availableQuery
 
 printCheckedout :: IO ()
-printCheckedout =
-  printToolQuery $
-    mconcat
-      [ "select * from tools ",
-        "where id in ",
-        "(select tool_id from checkedout);"
-      ]
+printCheckedout = do
+  out <- toolQuery $
+         mconcat
+         [ "select * from tools ",
+           "where id in ",
+           "(select tool_id from checkedout);"
+         ]
+  forM_ out $ \tool -> do
+    (putStrLn . showTool) tool
+    withConnection database $ \conn -> do
+      borrows <- query conn
+                 "SELECT * FROM checkedout WHERE tool_id = (?);"
+                 (Only (toolId tool)) :: IO [Checkout]
+      mapM_ (putStrLn . (" borrowed by: " ++) . show . borrower_id) borrows
+
 
 selectTool :: Connection -> Int -> IO (Maybe Tool)
 selectTool conn toolid = do
