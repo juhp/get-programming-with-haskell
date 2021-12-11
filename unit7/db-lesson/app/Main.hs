@@ -173,24 +173,25 @@ checkinAndUpdate toolid = do
 
 promptAndCheckout :: IO ()
 promptAndCheckout = do
-  putStrLn "Enter the id of the user"
+  putStrLn "Enter the id of the user:"
   userid <- read <$> getLine
-  putStrLn "Enter the id of the tool"
+  putStrLn "Enter the id of the tool:"
   toolid <- read <$> getLine
   checkout userid toolid
 
 promptAndCheckin :: IO ()
 promptAndCheckin = do
-  putStrLn "enter the id of tool"
+  putStrLn "Enter the id of tool:"
   toolid <- read <$> getLine
   checkinAndUpdate toolid
 
 promptAndAddUser :: IO ()
 promptAndAddUser = do
-  putStrLn "Enter new user name"
+  putStrLn "Enter new user name:"
   user <- getLine
-
-  addUser user
+  case words user of
+    [] -> promptAndAddUser
+    ns -> addUser $ unwords ns
 
 commands :: [String]
 commands =
