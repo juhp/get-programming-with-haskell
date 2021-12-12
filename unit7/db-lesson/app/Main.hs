@@ -15,7 +15,7 @@ data Tool = Tool
     name :: String,
     description :: String,
     lastReturned :: Day,
-    timesLent :: Int
+    timesReturned :: Int
   }
 
 data User = User Int String
@@ -52,8 +52,8 @@ showTool tool =
       description tool,
       "\n last returned: ",
       show $ lastReturned tool,
-      "\n times lent: ",
-      show $ timesLent tool
+      "\n times returned: ",
+      show $ timesReturned tool
     ]
 
 database :: FilePath
@@ -156,30 +156,25 @@ haveUser :: Connection -> Int -> IO Bool
 haveUser conn userid =
   isJust <$> selectUser conn userid
 
-updateTool :: Tool -> Day -> Tool
-updateTool tool date =
-  Tool
-    { toolId = toolId tool,
-      name = name tool,
-      description = description tool,
-      lastReturned = date,
-      timesLent = 1 + timesLent tool
-    }
+updateTool :: Day -> Tool -> Tool
+updateTool date tool =
+  tool { lastReturned = date,
+         timesReturned = timesReturned tool + 1
+       }
 
-updateOrWarn :: Maybe Tool -> IO ()
-updateOrWarn Nothing = putStrLn "id not found"
-updateOrWarn (Just tool) =
+update :: Tool -> IO ()
+update tool =
   withConnection database $ \conn -> do
     let q =
           mconcat
             [ "UPDATE TOOLS SET lastReturned = ?,",
-              " timesLent = ? WHERE ID = ?;"
+              " timesReturned = ? WHERE ID = ?;"
             ]
     execute
       conn
       q
       ( lastReturned tool,
-        timesLent tool,
+        timesReturned tool,
         toolId tool
       )
     putStrLn "tool updated"
@@ -187,12 +182,11 @@ updateOrWarn (Just tool) =
 updateToolTable :: Int -> IO ()
 updateToolTable toolid =
   withConnection database $ \conn -> do
-    tool <- selectTool conn toolid
+    mtool <- selectTool conn toolid
     currentDay <- utctDay <$> getCurrentTime
-    let updatedTool =
-          updateTool <$> tool
-            <*> pure currentDay
-    updateOrWarn updatedTool
+    case mtool of
+      Nothing -> putStrLn "id not found"
+      Just tool -> update $ updateTool currentDay tool
 
 checkin :: IO ()
 checkin = do

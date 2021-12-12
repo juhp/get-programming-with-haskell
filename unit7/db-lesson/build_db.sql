@@ -13,7 +13,7 @@ CREATE TABLE tools (
        name TEXT,
        description TEXT,
        lastReturned TEXT, ---SQLite does not support date types
-       timesLent INTEGER
+       timesReturned INTEGER
        );
 
 
@@ -24,8 +24,8 @@ CREATE TABLE checkedout (
 
 INSERT INTO users (username) VALUES ('willkurt');
 
-INSERT INTO tools (name,description,lastReturned,timesLent)
+INSERT INTO tools (name,description,lastReturned,timesReturned)
 VALUES ('hammer','hits stuff','2017-01-01',0);
 
-INSERT INTO tools (name,description,lastReturned,timesLent)
+INSERT INTO tools (name,description,lastReturned,timesReturned)
 VALUES ('saw','cuts stuff','2017-01-01',0);
