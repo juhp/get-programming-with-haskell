@@ -1,14 +1,14 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 module Main where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_)
 import Data.Char (isDigit)
 import Data.List (intercalate)
 import Data.Maybe (isJust, listToMaybe)
 import Data.Time (Day, UTCTime (utctDay), getCurrentTime)
 import Database.SQLite.Simple
-import System.Directory (doesFileExist)
+import Database.SQLite.Simple.QQ
 import System.Exit (exitSuccess)
 
 data Tool = Tool
@@ -59,14 +59,23 @@ showTool tool =
 
 commands :: [String]
 commands =
-  ["users", "tools", "adduser", "checkout", "checkin", "in", "out", "quit"]
+  ["users", "tools",
+   "adduser", "addtool",
+   "lend", "return",
+   "in", "out",
+   "quit"]
+
+dbfile :: FilePath
+dbfile = "db/tools.db"
 
 main :: IO ()
 main = do
-  let dbfile = "tools.db"
-  dbExists <- doesFileExist dbfile
-  unless dbExists $
-    error $ dbfile ++ " not found: create it with create_db.sh"
+  withConnection dbfile $ \ db ->
+    execute_ db dbTables
+  loop
+
+loop :: IO ()
+loop = do
   putStrLn $
     mconcat
       [ "\nEnter a command (",
@@ -78,17 +87,18 @@ main = do
     [] -> return ()
     [c] ->
       if c `elem` commands
-        then withConnection "tools.db" $ performCommand c
+        then withConnection dbfile $ performCommand c
         else putStrLn "unknown command"
     _ -> putStrLn "enter single command"
-  main
+  loop
   where
     performCommand :: String -> (Connection -> IO ())
     performCommand "users" = printUsers
     performCommand "tools" = printTools
     performCommand "adduser" = addUser
-    performCommand "checkout" = checkout
-    performCommand "checkin" = checkin
+    performCommand "addtool" = addTool
+    performCommand "lend" = checkout
+    performCommand "return" = checkin
     performCommand "in" = printAvailable
     performCommand "out" = printCheckedout
     performCommand "quit" = const (putStrLn "bye!" >> exitSuccess)
@@ -96,12 +106,13 @@ main = do
 
 printUsers :: Connection -> IO ()
 printUsers db =
-  query_ db "SELECT * FROM users;"
+  query_ db
+  [sql|SELECT * FROM users|]
     >>= mapM_ (putStrLn . showUser)
 
 printTools :: Connection -> IO ()
 printTools db =
-  printToolQuery db "SELECT * FROM tools;"
+  printToolQuery db [sql|SELECT * FROM tools|]
 
 addUser :: Connection -> IO ()
 addUser db = do
@@ -112,9 +123,23 @@ addUser db = do
     ns -> do
       execute
         db
-        "INSERT INTO users (username) VALUES (?)"
+        [sql|INSERT INTO users (username) VALUES (?)|]
         (Only (unwords ns))
       putStrLn "user added"
+
+addTool :: Connection -> IO ()
+addTool db = do
+  tool <- getString "Enter new tool name:"
+  desc <- getString "Enter new tool description:"
+  execute
+    db
+    [sql|
+        INSERT INTO tools
+        (name,description,lastReturned,timesReturned)
+        VALUES (?,?,?,?)
+        |]
+    (tool,desc,SQLText "2017-01-01", SQLInteger 0)
+  putStrLn "tool added"
 
 checkout :: Connection -> IO ()
 checkout db = do
@@ -131,7 +156,7 @@ checkout db = do
             then do
               execute
                 db
-                "INSERT INTO checkedout (user_id,tool_id) VALUES (?,?)"
+                [sql|INSERT INTO checkedout (user_id,tool_id) VALUES (?,?)|]
                 (userid, toolid)
               putStrLn $ "checked out #" ++ show toolid
             else putStrLn "not available"
@@ -149,7 +174,7 @@ checkin db = do
         then do
           execute
             db
-            "DELETE FROM checkedout WHERE tool_id = (?);"
+            [sql|DELETE FROM checkedout WHERE tool_id = (?)|]
             (Only toolid)
           updateToolTable db toolid
         else putStrLn "already checked in"
@@ -162,17 +187,17 @@ printCheckedout :: Connection -> IO ()
 printCheckedout db = do
   out <-
     query_ db $
-      mconcat
-        [ "select * from tools ",
-          "where id in ",
-          "(select tool_id from checkedout);"
-        ]
+      [sql|
+        SELECT * FROM tools
+        WHERE id IN
+        (SELECT tool_id FROM checkedout)
+        |]
   forM_ out $ \tool -> do
     (putStrLn . showTool) tool
     borrowers <-
       query
         db
-        "SELECT user_id FROM checkedout WHERE tool_id = (?);"
+        [sql|SELECT user_id FROM checkedout WHERE tool_id = (?)|]
         (Only (toolId tool)) ::
         IO [Only Int]
     mapM_ (putStrLn . (" borrowed by: " ++) . show . fromOnly) borrowers
@@ -184,7 +209,7 @@ getUser db userid = do
   listToMaybe
     <$> query
       db
-      "SELECT * FROM users WHERE id = (?)"
+      [sql|SELECT * FROM users WHERE id = (?)|]
       (Only userid)
 
 getIDs :: FromRow a => Connection -> Query -> (a -> Int) -> IO [Int]
@@ -192,11 +217,11 @@ getIDs db q f = map f <$> query_ db q
 
 availableQuery :: Query
 availableQuery =
-  mconcat
-    [ "select * from tools ",
-      "where id not in ",
-      "(select tool_id from checkedout);"
-    ]
+  [sql|
+      select * from tools
+      where id not in
+      (select tool_id from checkedout)
+      |]
 
 printToolQuery :: Connection -> Query -> IO ()
 printToolQuery db q = query_ db q >>= mapM_ (putStrLn . showTool)
@@ -206,7 +231,7 @@ getTool db toolid = do
   listToMaybe
     <$> query
       db
-      "SELECT * FROM tools WHERE id = (?)"
+      [sql|SELECT * FROM tools WHERE id = (?)|]
       (Only toolid)
 
 haveTool :: Connection -> Int -> IO Bool
@@ -230,14 +255,13 @@ updateToolTable db toolid = do
 
     update :: Tool -> IO ()
     update tool = do
-      let q =
-            mconcat
-              [ "UPDATE TOOLS SET lastReturned = ?,",
-                " timesReturned = ? WHERE ID = ?;"
-              ]
       execute
         db
-        q
+        [sql|
+            UPDATE tools SET
+            lastReturned = ?, timesReturned = ?
+            WHERE ID = ?
+            |]
         ( lastReturned tool,
           timesReturned tool,
           toolId tool
@@ -251,3 +275,31 @@ readInt prompt = do
   case words input of
     [ds] | all isDigit ds -> return $ read ds
     _ -> readInt prompt
+
+getString :: String -> IO String
+getString prompt = do
+  putStrLn prompt
+  input <- getLine
+  case words input of
+    [] -> getString prompt
+    ws -> return $ unwords ws
+
+dbTables :: Query
+dbTables =
+  [sql|
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        username TEXT
+        );
+      CREATE TABLE tools (
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        description TEXT,
+        lastReturned TEXT,
+        timesReturned INTEGER
+        );
+      CREATE TABLE checkedout (
+        user_id INTEGER,
+        tool_id INTEGER
+        );
+        |]
