@@ -76,33 +76,33 @@ main = do
 
 loop :: IO ()
 loop = do
-  putStrLn $
+  ws <- getWords $
     mconcat
-      [ "\nEnter a command (",
-        intercalate ", " commands,
-        "):"
-      ]
-  input <- getLine
-  case words input of
-    [] -> return ()
-    [c] ->
+    [ "\nEnter a command (",
+      intercalate ", " commands,
+      "):"
+    ]
+  case ws of
+    c:args ->
       if c `elem` commands
-        then withConnection dbfile $ performCommand c
+        then withConnection dbfile $ performCommand c (unwords args)
         else putStrLn "unknown command"
-    _ -> putStrLn "enter single command"
+    _ -> putStrLn "no command"
   loop
   where
-    performCommand :: String -> (Connection -> IO ())
-    performCommand "users" = printUsers
-    performCommand "tools" = printTools
-    performCommand "adduser" = addUser
-    performCommand "addtool" = addTool
-    performCommand "lend" = checkout
-    performCommand "return" = checkin
-    performCommand "in" = printAvailable
-    performCommand "out" = printCheckedout
-    performCommand "quit" = const (putStrLn "bye!" >> exitSuccess)
-    performCommand _ = const (putStrLn "unknown command")
+    performCommand :: String -> String -> (Connection -> IO ())
+    performCommand c arg =
+      case c of
+        "users" -> printUsers
+        "tools" -> printTools
+        "adduser" -> addUser arg
+        "addtool" -> addTool arg
+        "lend" -> checkout arg
+        "return" -> checkin arg
+        "in" -> printAvailable
+        "out" -> printCheckedout
+        "quit" -> const (putStrLn "bye!" >> exitSuccess)
+        _ -> const (putStrLn "unknown command")
 
 printUsers :: Connection -> IO ()
 printUsers db =
@@ -114,22 +114,18 @@ printTools :: Connection -> IO ()
 printTools db =
   printToolQuery db [sql|SELECT * FROM tools|]
 
-addUser :: Connection -> IO ()
-addUser db = do
-  putStrLn "Enter new user name:"
-  user <- getLine
-  case words user of
-    [] -> addUser db
-    ns -> do
-      execute
-        db
-        [sql|INSERT INTO users (username) VALUES (?)|]
-        (Only (unwords ns))
-      putStrLn "user added"
+addUser :: String -> Connection -> IO ()
+addUser arg db = do
+  user <- getStringDef arg "Enter new user name:"
+  execute
+    db
+    [sql|INSERT INTO users (username) VALUES (?)|]
+    (Only user)
+  putStrLn "user added"
 
-addTool :: Connection -> IO ()
-addTool db = do
-  tool <- getString "Enter new tool name:"
+addTool :: String -> Connection -> IO ()
+addTool arg db = do
+  tool <- getStringDef arg "Enter new tool name:"
   desc <- getString "Enter new tool description:"
   execute
     db
@@ -141,13 +137,16 @@ addTool db = do
     (tool,desc,SQLText "2017-01-01", SQLInteger 0)
   putStrLn "tool added"
 
-checkout :: Connection -> IO ()
-checkout db = do
-  userid <- readInt "Enter user id:"
+checkout :: String -> Connection -> IO ()
+checkout arg db = do
+  let (arg1,rest) = case words arg of
+                      [] -> ("", "")
+                      w:ws -> (w,unwords ws)
+  userid <- readIntDef arg1 "Enter user id:"
   userexists <- isJust <$> getUser db userid
   if userexists
     then do
-      toolid <- readInt "Enter tool id:"
+      toolid <- readIntDef rest "Enter tool id:"
       toolexists <- haveTool db toolid
       if toolexists
         then do
@@ -163,9 +162,9 @@ checkout db = do
         else putStrLn "unknown toolid"
     else putStrLn "unknown userid"
 
-checkin :: Connection -> IO ()
-checkin db = do
-  toolid <- readInt "Enter tool id:"
+checkin :: String -> Connection -> IO ()
+checkin arg db = do
+  toolid <- readIntDef arg "Enter tool id:"
   toolexists <- haveTool db toolid
   if toolexists
     then do
@@ -268,21 +267,37 @@ updateToolTable db toolid = do
         )
       putStrLn "tool updated"
 
-readInt :: String -> IO Int
-readInt prompt = do
+getWords :: String -> IO [String]
+getWords prompt = do
   putStrLn prompt
   input <- getLine
+  case words input of
+    [] -> getWords prompt
+    ws -> return ws
+
+getString :: String -> IO String
+getString prompt = do
+  unwords <$> getWords prompt
+
+getStringDef :: String -> String -> IO String
+getStringDef def prompt =
+  if null def
+  then getString prompt
+  else return def
+
+readInt :: String -> IO Int
+readInt prompt = do
+  input <- getString prompt
   case words input of
     [ds] | all isDigit ds -> return $ read ds
     _ -> readInt prompt
 
-getString :: String -> IO String
-getString prompt = do
-  putStrLn prompt
-  input <- getLine
+readIntDef :: String -> String -> IO Int
+readIntDef arg prompt = do
+  input <- getStringDef arg prompt
   case words input of
-    [] -> getString prompt
-    ws -> return $ unwords ws
+    [ds] | all isDigit ds -> return $ read ds
+    _ -> readInt prompt
 
 dbTables :: [Query]
 dbTables =
