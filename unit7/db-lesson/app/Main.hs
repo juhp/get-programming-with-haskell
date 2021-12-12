@@ -293,7 +293,7 @@ dbTables =
         username TEXT
         )|],
     [sql|
-        CREATE TABLE tools (
+        CREATE TABLE IF NOT EXISTS tools (
         id INTEGER PRIMARY KEY,
         name TEXT,
         description TEXT,
@@ -301,7 +301,7 @@ dbTables =
         timesReturned INTEGER
         )|],
     [sql|
-        CREATE TABLE checkedout (
+        CREATE TABLE IF NOT EXISTS checkedout (
         user_id INTEGER,
         tool_id INTEGER
         )|]
