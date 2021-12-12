@@ -59,7 +59,7 @@ showTool tool =
 checkout :: Connection -> IO ()
 checkout db = do
     userid <- readInt "Enter user id:"
-    userexists <- haveUser db userid
+    userexists <- isJust <$> selectUser db userid
     if userexists
       then do
       toolid <- readInt "Enter tool id:"
@@ -118,8 +118,8 @@ printCheckedout db = do
                  (Only (toolId tool)) :: IO [Only Int]
     mapM_ (putStrLn . (" borrowed by: " ++) . show . fromOnly) borrowers
 
-selectTool :: Connection -> Int -> IO (Maybe Tool)
-selectTool db toolid = do
+getTool :: Connection -> Int -> IO (Maybe Tool)
+getTool db toolid = do
   listToMaybe <$>
     query
       db
@@ -128,7 +128,7 @@ selectTool db toolid = do
 
 haveTool :: Connection -> Int -> IO Bool
 haveTool db toolid =
-  isJust <$> selectTool db toolid
+  isJust <$> getTool db toolid
 
 selectUser :: Connection -> Int -> IO (Maybe User)
 selectUser db userid = do
@@ -138,24 +138,20 @@ selectUser db userid = do
       "SELECT * FROM users WHERE id = (?)"
       (Only userid)
 
-haveUser :: Connection -> Int -> IO Bool
-haveUser db userid =
-  isJust <$> selectUser db userid
-
-updateTool :: Day -> Tool -> Tool
-updateTool date tool =
-  tool { lastReturned = date,
-         timesReturned = timesReturned tool + 1
-       }
-
 updateToolTable :: Connection -> Int -> IO ()
 updateToolTable db toolid = do
-    mtool <- selectTool db toolid
+    mtool <- getTool db toolid
     currentDay <- utctDay <$> getCurrentTime
     case mtool of
       Nothing -> putStrLn "id not found"
-      Just tool -> update $ updateTool currentDay tool
+      Just tool -> update $ updatedTool currentDay tool
   where
+    updatedTool :: Day -> Tool -> Tool
+    updatedTool date tool =
+      tool { lastReturned = date,
+             timesReturned = timesReturned tool + 1
+           }
+
     update :: Tool -> IO ()
     update tool = do
       let q =
@@ -195,19 +191,16 @@ readInt prompt = do
     [ds] | all isDigit ds -> return $ read ds
     _ -> readInt prompt
 
-promptAndAddUser :: Connection -> IO ()
-promptAndAddUser db = do
+addUser :: Connection -> IO ()
+addUser db = do
   putStrLn "Enter new user name:"
   user <- getLine
   case words user of
-    [] -> promptAndAddUser db
-    ns -> addUser $ unwords ns
-  where
-    addUser :: String -> IO ()
-    addUser user = do
+    [] -> addUser db
+    ns -> do
       execute db
         "INSERT INTO users (username) VALUES (?)"
-        (Only user)
+        (Only (unwords ns))
       putStrLn "user added"
 
 commands :: [String]
@@ -235,7 +228,7 @@ main = do
     performCommand :: String -> (Connection -> IO ())
     performCommand "users" = printUsers
     performCommand "tools" = printTools
-    performCommand "adduser" = promptAndAddUser
+    performCommand "adduser" = addUser
     performCommand "checkout" = checkout
     performCommand "checkin" = checkin
     performCommand "in" = printAvailable
