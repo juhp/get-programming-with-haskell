@@ -2,13 +2,13 @@
 
 module Main where
 
+import Control.Monad (forM_)
+import Data.Char (isDigit)
 import Data.List (intercalate)
-import Data.Maybe (listToMaybe, isJust)
+import Data.Maybe (isJust, listToMaybe)
 import Data.Time (Day, UTCTime (utctDay), getCurrentTime)
 import Database.SQLite.Simple
 import System.Exit (exitSuccess)
-import Data.Char (isDigit)
-import Control.Monad (forM_)
 
 data Tool = Tool
   { toolId :: Int,
@@ -62,12 +62,13 @@ commands =
 
 main :: IO ()
 main = do
-  putStrLn $ mconcat
-    ["\n",
-     "Enter a command (",
-     intercalate ", " commands,
-     "):"
-    ]
+  putStrLn $
+    mconcat
+      [ "\n",
+        "Enter a command (",
+        intercalate ", " commands,
+        "):"
+      ]
   input <- getLine
   case words input of
     [] -> return ()
@@ -92,7 +93,7 @@ main = do
 printUsers :: Connection -> IO ()
 printUsers db =
   query_ db "SELECT * FROM users;"
-  >>= mapM_ (putStrLn . showUser)
+    >>= mapM_ (putStrLn . showUser)
 
 printTools :: Connection -> IO ()
 printTools db =
@@ -105,31 +106,33 @@ addUser db = do
   case words user of
     [] -> addUser db
     ns -> do
-      execute db
+      execute
+        db
         "INSERT INTO users (username) VALUES (?)"
         (Only (unwords ns))
       putStrLn "user added"
 
 checkout :: Connection -> IO ()
 checkout db = do
-    userid <- readInt "Enter user id:"
-    userexists <- isJust <$> getUser db userid
-    if userexists
-      then do
+  userid <- readInt "Enter user id:"
+  userexists <- isJust <$> getUser db userid
+  if userexists
+    then do
       toolid <- readInt "Enter tool id:"
       toolexists <- haveTool db toolid
       if toolexists
         then do
-        available <- getIDs db availableQuery toolId
-        if toolid `elem` available
-          then do
-          execute db
-            "INSERT INTO checkedout (user_id,tool_id) VALUES (?,?)"
-            (userid, toolid)
-          putStrLn $ "checked out #" ++ show toolid
-          else putStrLn "not available"
+          available <- getIDs db availableQuery toolId
+          if toolid `elem` available
+            then do
+              execute
+                db
+                "INSERT INTO checkedout (user_id,tool_id) VALUES (?,?)"
+                (userid, toolid)
+              putStrLn $ "checked out #" ++ show toolid
+            else putStrLn "not available"
         else putStrLn "unknown toolid"
-      else putStrLn "unknown userid"
+    else putStrLn "unknown userid"
 
 checkin :: Connection -> IO ()
 checkin db = do
@@ -137,14 +140,15 @@ checkin db = do
   toolexists <- haveTool db toolid
   if toolexists
     then do
-    available <- getIDs db availableQuery toolId
-    if toolid `notElem` available
-      then do
-      execute db
-        "DELETE FROM checkedout WHERE tool_id = (?);"
-        (Only toolid)
-      updateToolTable db toolid
-      else putStrLn "already checked in"
+      available <- getIDs db availableQuery toolId
+      if toolid `notElem` available
+        then do
+          execute
+            db
+            "DELETE FROM checkedout WHERE tool_id = (?);"
+            (Only toolid)
+          updateToolTable db toolid
+        else putStrLn "already checked in"
     else putStrLn "unknown toolid"
 
 printAvailable :: Connection -> IO ()
@@ -152,25 +156,29 @@ printAvailable db = printToolQuery db availableQuery
 
 printCheckedout :: Connection -> IO ()
 printCheckedout db = do
-  out <- query_ db $
-         mconcat
-         [ "select * from tools ",
-           "where id in ",
-           "(select tool_id from checkedout);"
-         ]
+  out <-
+    query_ db $
+      mconcat
+        [ "select * from tools ",
+          "where id in ",
+          "(select tool_id from checkedout);"
+        ]
   forM_ out $ \tool -> do
     (putStrLn . showTool) tool
-    borrowers <- query db
-                 "SELECT user_id FROM checkedout WHERE tool_id = (?);"
-                 (Only (toolId tool)) :: IO [Only Int]
+    borrowers <-
+      query
+        db
+        "SELECT user_id FROM checkedout WHERE tool_id = (?);"
+        (Only (toolId tool)) ::
+        IO [Only Int]
     mapM_ (putStrLn . (" borrowed by: " ++) . show . fromOnly) borrowers
 
 ----
 
 getUser :: Connection -> Int -> IO (Maybe User)
 getUser db userid = do
-  listToMaybe <$>
-    query
+  listToMaybe
+    <$> query
       db
       "SELECT * FROM users WHERE id = (?)"
       (Only userid)
@@ -180,19 +188,19 @@ getIDs db q f = map f <$> query_ db q
 
 availableQuery :: Query
 availableQuery =
-      mconcat
-      [ "select * from tools ",
-        "where id not in ",
-        "(select tool_id from checkedout);"
-      ]
+  mconcat
+    [ "select * from tools ",
+      "where id not in ",
+      "(select tool_id from checkedout);"
+    ]
 
 printToolQuery :: Connection -> Query -> IO ()
 printToolQuery db q = query_ db q >>= mapM_ (putStrLn . showTool)
 
 getTool :: Connection -> Int -> IO (Maybe Tool)
 getTool db toolid = do
-  listToMaybe <$>
-    query
+  listToMaybe
+    <$> query
       db
       "SELECT * FROM tools WHERE id = (?)"
       (Only toolid)
@@ -203,17 +211,18 @@ haveTool db toolid =
 
 updateToolTable :: Connection -> Int -> IO ()
 updateToolTable db toolid = do
-    mtool <- getTool db toolid
-    currentDay <- utctDay <$> getCurrentTime
-    case mtool of
-      Nothing -> putStrLn "id not found"
-      Just tool -> update $ updatedTool currentDay tool
+  mtool <- getTool db toolid
+  currentDay <- utctDay <$> getCurrentTime
+  case mtool of
+    Nothing -> putStrLn "id not found"
+    Just tool -> update $ updatedTool currentDay tool
   where
     updatedTool :: Day -> Tool -> Tool
     updatedTool date tool =
-      tool { lastReturned = date,
-             timesReturned = timesReturned tool + 1
-           }
+      tool
+        { lastReturned = date,
+          timesReturned = timesReturned tool + 1
+        }
 
     update :: Tool -> IO ()
     update tool = do
@@ -222,7 +231,8 @@ updateToolTable db toolid = do
               [ "UPDATE TOOLS SET lastReturned = ?,",
                 " timesReturned = ? WHERE ID = ?;"
               ]
-      execute db
+      execute
+        db
         q
         ( lastReturned tool,
           timesReturned tool,
