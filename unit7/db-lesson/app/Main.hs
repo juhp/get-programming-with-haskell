@@ -59,15 +59,6 @@ showTool tool =
 database :: FilePath
 database = "tools.db"
 
-addUser :: String -> IO ()
-addUser user =
-  withConnection database $ \conn -> do
-    execute
-      conn
-      "INSERT INTO users (username) VALUES (?)"
-      (Only user)
-    putStrLn "user added"
-
 checkout :: IO ()
 checkout =
   withConnection database $ \conn -> do
@@ -227,6 +218,15 @@ readInt prompt = do
   case words input of
     [ds] | all isDigit ds -> return $ read ds
     _ -> readInt prompt
+
+addUser :: String -> IO ()
+addUser user =
+  withConnection database $ \conn -> do
+    execute
+      conn
+      "INSERT INTO users (username) VALUES (?)"
+      (Only user)
+    putStrLn "user added"
 
 promptAndAddUser :: IO ()
 promptAndAddUser = do
