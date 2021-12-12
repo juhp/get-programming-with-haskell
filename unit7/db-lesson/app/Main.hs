@@ -2,12 +2,13 @@
 
 module Main where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Data.Char (isDigit)
 import Data.List (intercalate)
 import Data.Maybe (isJust, listToMaybe)
 import Data.Time (Day, UTCTime (utctDay), getCurrentTime)
 import Database.SQLite.Simple
+import System.Directory (doesFileExist)
 import System.Exit (exitSuccess)
 
 data Tool = Tool
@@ -62,10 +63,13 @@ commands =
 
 main :: IO ()
 main = do
+  let dbfile = "tools.db"
+  dbExists <- doesFileExist dbfile
+  unless dbExists $
+    error $ dbfile ++ " not found: create it with create_db.sh"
   putStrLn $
     mconcat
-      [ "\n",
-        "Enter a command (",
+      [ "\nEnter a command (",
         intercalate ", " commands,
         "):"
       ]
