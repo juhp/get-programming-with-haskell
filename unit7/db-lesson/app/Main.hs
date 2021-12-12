@@ -71,7 +71,7 @@ dbfile = "db/tools.db"
 main :: IO ()
 main = do
   withConnection dbfile $ \ db ->
-    execute_ db dbTables
+    mapM_ (execute_ db) dbTables
   loop
 
 loop :: IO ()
@@ -284,22 +284,25 @@ getString prompt = do
     [] -> getString prompt
     ws -> return $ unwords ws
 
-dbTables :: Query
+dbTables :: [Query]
 dbTables =
-  [sql|
-      CREATE TABLE IF NOT EXISTS users (
+  [
+    [sql|
+        CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
         username TEXT
-        );
-      CREATE TABLE tools (
+        )|],
+    [sql|
+        CREATE TABLE tools (
         id INTEGER PRIMARY KEY,
         name TEXT,
         description TEXT,
         lastReturned TEXT,
         timesReturned INTEGER
-        );
-      CREATE TABLE checkedout (
+        )|],
+    [sql|
+        CREATE TABLE checkedout (
         user_id INTEGER,
         tool_id INTEGER
-        );
-        |]
+        )|]
+  ]
