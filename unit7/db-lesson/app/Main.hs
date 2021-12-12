@@ -56,43 +56,34 @@ showTool tool =
       show $ timesReturned tool
     ]
 
-database :: FilePath
-database = "tools.db"
-
-checkout :: IO ()
-checkout =
-  withConnection database $ \conn -> do
+checkout :: Connection -> IO ()
+checkout db = do
     userid <- readInt "Enter user id:"
-    userexists <- haveUser conn userid
+    userexists <- haveUser db userid
     if userexists
       then do
       toolid <- readInt "Enter tool id:"
-      toolexists <- haveTool conn toolid
+      toolexists <- haveTool db toolid
       if toolexists
         then do
-        available <- idQuery toolId availableQuery
+        available <- getIDs db availableQuery toolId
         if toolid `elem` available
           then do
-          execute conn
+          execute db
             "INSERT INTO checkedout (user_id,tool_id) VALUES (?,?)"
             (userid, toolid)
-          putStrLn $ "checked out " ++ show toolid
+          putStrLn $ "checked out #" ++ show toolid
           else putStrLn "not available"
         else putStrLn "unknown toolid"
       else putStrLn "unknown userid"
 
-printUserQuery :: Query -> IO ()
-printUserQuery q =
-  withConnection database $ \conn -> do
-    users <- query_ conn q
-    mapM_ (putStrLn . showUser) users
+printUsers :: Connection -> IO ()
+printUsers db =
+  query_ db "SELECT * FROM users;"
+  >>= mapM_ (putStrLn . showUser)
 
-printUsers :: IO ()
-printUsers =
-  printUserQuery "SELECT * FROM users;"
-
-idQuery :: FromRow a => (a -> Int) -> Query -> IO [Int]
-idQuery f = fmap (fmap f) . withConnection database . flip query_
+getIDs :: FromRow a => Connection -> Query -> (a -> Int) -> IO [Int]
+getIDs db q f = map f <$> query_ db q
 
 availableQuery :: Query
 availableQuery =
@@ -102,22 +93,19 @@ availableQuery =
         "(select tool_id from checkedout);"
       ]
 
-toolQuery :: Query -> IO [Tool]
-toolQuery = withConnection database . flip query_
+printToolQuery :: Connection -> Query -> IO ()
+printToolQuery db q = query_ db q >>= mapM_ (putStrLn . showTool)
 
-printToolQuery :: Query -> IO ()
-printToolQuery q = toolQuery q >>= mapM_ (putStrLn . showTool)
+printTools :: Connection -> IO ()
+printTools db =
+  printToolQuery db "SELECT * FROM tools;"
 
-printTools :: IO ()
-printTools =
-  printToolQuery "SELECT * FROM tools;"
+printAvailable :: Connection -> IO ()
+printAvailable db = printToolQuery db availableQuery
 
-printAvailable :: IO ()
-printAvailable = printToolQuery availableQuery
-
-printCheckedout :: IO ()
-printCheckedout = do
-  out <- toolQuery $
+printCheckedout :: Connection -> IO ()
+printCheckedout db = do
+  out <- query_ db $
          mconcat
          [ "select * from tools ",
            "where id in ",
@@ -125,36 +113,34 @@ printCheckedout = do
          ]
   forM_ out $ \tool -> do
     (putStrLn . showTool) tool
-    withConnection database $ \conn -> do
-      borrowers <- query conn
+    borrowers <- query db
                  "SELECT user_id FROM checkedout WHERE tool_id = (?);"
                  (Only (toolId tool)) :: IO [Only Int]
-      mapM_ (putStrLn . (" borrowed by: " ++) . show . fromOnly) borrowers
-
+    mapM_ (putStrLn . (" borrowed by: " ++) . show . fromOnly) borrowers
 
 selectTool :: Connection -> Int -> IO (Maybe Tool)
-selectTool conn toolid = do
+selectTool db toolid = do
   listToMaybe <$>
     query
-      conn
+      db
       "SELECT * FROM tools WHERE id = (?)"
       (Only toolid)
 
 haveTool :: Connection -> Int -> IO Bool
-haveTool conn toolid =
-  isJust <$> selectTool conn toolid
+haveTool db toolid =
+  isJust <$> selectTool db toolid
 
 selectUser :: Connection -> Int -> IO (Maybe User)
-selectUser conn userid = do
+selectUser db userid = do
   listToMaybe <$>
     query
-      conn
+      db
       "SELECT * FROM users WHERE id = (?)"
       (Only userid)
 
 haveUser :: Connection -> Int -> IO Bool
-haveUser conn userid =
-  isJust <$> selectUser conn userid
+haveUser db userid =
+  isJust <$> selectUser db userid
 
 updateTool :: Day -> Tool -> Tool
 updateTool date tool =
@@ -162,48 +148,44 @@ updateTool date tool =
          timesReturned = timesReturned tool + 1
        }
 
-update :: Tool -> IO ()
-update tool =
-  withConnection database $ \conn -> do
-    let q =
-          mconcat
-            [ "UPDATE TOOLS SET lastReturned = ?,",
-              " timesReturned = ? WHERE ID = ?;"
-            ]
-    execute
-      conn
-      q
-      ( lastReturned tool,
-        timesReturned tool,
-        toolId tool
-      )
-    putStrLn "tool updated"
-
-updateToolTable :: Int -> IO ()
-updateToolTable toolid =
-  withConnection database $ \conn -> do
-    mtool <- selectTool conn toolid
+updateToolTable :: Connection -> Int -> IO ()
+updateToolTable db toolid = do
+    mtool <- selectTool db toolid
     currentDay <- utctDay <$> getCurrentTime
     case mtool of
       Nothing -> putStrLn "id not found"
       Just tool -> update $ updateTool currentDay tool
+  where
+    update :: Tool -> IO ()
+    update tool = do
+      let q =
+            mconcat
+              [ "UPDATE TOOLS SET lastReturned = ?,",
+                " timesReturned = ? WHERE ID = ?;"
+              ]
+      execute db
+        q
+        ( lastReturned tool,
+          timesReturned tool,
+          toolId tool
+        )
+      putStrLn "tool updated"
 
-checkin :: IO ()
-checkin = do
+checkin :: Connection -> IO ()
+checkin db = do
   toolid <- readInt "Enter tool id:"
-  withConnection database $ \conn -> do
-    toolexists <- haveTool conn toolid
-    if toolexists
+  toolexists <- haveTool db toolid
+  if toolexists
+    then do
+    available <- getIDs db availableQuery toolId
+    if toolid `notElem` available
       then do
-      available <- idQuery toolId availableQuery
-      if toolid `notElem` available
-        then do
-        execute conn
-          "DELETE FROM checkedout WHERE tool_id = (?);"
-          (Only toolid)
-        updateToolTable toolid
-        else putStrLn "already checked in"
-      else putStrLn "unknown toolid"
+      execute db
+        "DELETE FROM checkedout WHERE tool_id = (?);"
+        (Only toolid)
+      updateToolTable db toolid
+      else putStrLn "already checked in"
+    else putStrLn "unknown toolid"
 
 readInt :: String -> IO Int
 readInt prompt = do
@@ -213,22 +195,20 @@ readInt prompt = do
     [ds] | all isDigit ds -> return $ read ds
     _ -> readInt prompt
 
-addUser :: String -> IO ()
-addUser user =
-  withConnection database $ \conn -> do
-    execute
-      conn
-      "INSERT INTO users (username) VALUES (?)"
-      (Only user)
-    putStrLn "user added"
-
-promptAndAddUser :: IO ()
-promptAndAddUser = do
+promptAndAddUser :: Connection -> IO ()
+promptAndAddUser db = do
   putStrLn "Enter new user name:"
   user <- getLine
   case words user of
-    [] -> promptAndAddUser
+    [] -> promptAndAddUser db
     ns -> addUser $ unwords ns
+  where
+    addUser :: String -> IO ()
+    addUser user = do
+      execute db
+        "INSERT INTO users (username) VALUES (?)"
+        (Only user)
+      putStrLn "user added"
 
 commands :: [String]
 commands =
@@ -247,12 +227,12 @@ main = do
     [] -> return ()
     [c] ->
       if c `elem` commands
-        then performCommand c
+        then withConnection "tools.db" $ performCommand c
         else putStrLn "unknown command"
     _ -> putStrLn "enter single command"
   main
   where
-    performCommand :: String -> IO ()
+    performCommand :: String -> (Connection -> IO ())
     performCommand "users" = printUsers
     performCommand "tools" = printTools
     performCommand "adduser" = promptAndAddUser
@@ -260,5 +240,5 @@ main = do
     performCommand "checkin" = checkin
     performCommand "in" = printAvailable
     performCommand "out" = printCheckedout
-    performCommand "quit" = putStrLn "bye!" >> exitSuccess
-    performCommand _ = putStrLn "unknown command"
+    performCommand "quit" = const (putStrLn "bye!" >> exitSuccess)
+    performCommand _ = const (putStrLn "unknown command")
