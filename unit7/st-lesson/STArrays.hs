@@ -28,13 +28,7 @@ listToSTUArray vals = do
   return myArray
 
 listToUArray :: [Int] -> UArray Int Int
-listToUArray vals = runSTUArray $ do
-  let end = length vals - 1
-  myArray <- newArray (0, end) 0
-  forM_ [0 .. end] $ \i -> do
-    let val = vals !! i
-    writeArray myArray i val
-  return myArray
+listToUArray vals = runSTUArray $ listToSTUArray vals
 
 myData :: UArray Int Int
 myData = listArray (0, 5) [7, 6, 4, 8, 10, 2]
