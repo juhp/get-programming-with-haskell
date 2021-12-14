@@ -41,8 +41,7 @@ bubbleSort myArray = runSTUArray $ do
     forM_ [0 .. (end - 1)] $ \j -> do
       val <- readArray stArray j
       nextVal <- readArray stArray (j + 1)
-      let outOfOrder = val > nextVal
-      when outOfOrder $ do
+      when (val > nextVal) $ do
         writeArray stArray j nextVal
         writeArray stArray (j + 1) val
   return stArray
